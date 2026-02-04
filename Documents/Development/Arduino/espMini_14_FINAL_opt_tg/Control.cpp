@@ -168,46 +168,47 @@
     return String(buffer);
   }
 
-  void Control::updatePins() {
+ void Control::updatePins() {
     if (myDevices.empty()) return;
 
     Device& currentDevice = myDevices[currentDeviceIndex];
     static std::unordered_map<int, bool> lastPinStates;
     static std::unordered_map<int, uint8_t> lastPwmValues;
 
+    bool isForceControlRelay = currentDevice.isForceControlRelay;
+    
     for (auto& relay : currentDevice.relays) {
-
-      if (relay.isOutput) {
-
-        if (relay.isPwm) {
-          uint8_t newPwmValue = relay.pwm;
-
-          if (lastPwmValues[relay.pin] != newPwmValue) {
-            analogWrite(relay.pin, newPwmValue);
-            lastPwmValues[relay.pin] = newPwmValue;
-
-            char logBuffer[64];
-            Serial.printf(logBuffer, sizeof(logBuffer), "PWM обновлено | PIN: %d -> %d",
-                     relay.pin, newPwmValue);
-          }
+        if (relay.isOutput) {
+            if (relay.isPwm) {
+                uint8_t newPwmValue = relay.pwm;
+                
+                if ((lastPwmValues[relay.pin] != newPwmValue) || isForceControlRelay) {
+                    analogWrite(relay.pin, newPwmValue);
+                    lastPwmValues[relay.pin] = newPwmValue;
+                    
+                    char logBuffer[64];
+                    snprintf(logBuffer, sizeof(logBuffer),
+                             "PWM обновлено | PIN: %d -> %d",
+                             relay.pin, newPwmValue);
+                    logger.addLog(logBuffer, LOG_INFO);
+                }
+            } else { // обычное цифровое управление
+                bool newState = relay.statePin;
+                
+                if ((lastPinStates[relay.pin] != newState) || isForceControlRelay) {
+                    digitalWrite(relay.pin, newState ? HIGH : LOW);
+                    lastPinStates[relay.pin] = newState;
+                    
+                    char logBuffer[64];
+                    snprintf(logBuffer, sizeof(logBuffer),
+                             "Реле обновлено | PIN: %d -> %s",
+                             relay.pin, newState ? "HIGH" : "LOW");
+                    logger.addLog(logBuffer, LOG_INFO);
+                }
+            }
+            
+            currentDevice.isForceControlRelay = false;
         }
-
-        else {
-          bool newState = relay.statePin;
-
-          if (lastPinStates[relay.pin] != newState) {
-            digitalWrite(relay.pin, newState ? HIGH : LOW);
-            lastPinStates[relay.pin] = newState;
-
-char logBuffer[64];
-snprintf(logBuffer, sizeof(logBuffer), "Реле обновлено | PIN: %d -> %s",
-         relay.pin, newState ? "HIGH" : "LOW");
-
-logger.addLog(logBuffer, LOG_INFO);
-
-          }
-        }
-      }
     }
 }
 
@@ -245,61 +246,70 @@ double Control::scalePidCoefficient(double userCoefficient) {
 }
 
 void Control::setTemperature() {
-  if (myDevices.empty()) return;
+    if (myDevices.empty()) return;
+    Device& device = myDevices[currentDeviceIndex];
+    Temperature& temp = device.temperature;
 
-  Device& device = myDevices[currentDeviceIndex];
-  Temperature& temp = device.temperature;
+    static bool wasActive = false;
+    static uint8_t lastDeviceIndex = 255;
+    static int lastSensorId = -1;
+    static int lastRelayId = -1;
+    static int lastPidIndex = -1;
+    static float lastSetTemperature = -999.0f;  // <-- Новый флаг: последняя уставка
 
-  static bool wasActive = false;
-  static uint8_t lastDeviceIndex = 255;
-  static int lastSensorId = -1;
-  static int lastRelayId = -1;
-  static int lastPidIndex = -1;
-
-  if (lastDeviceIndex != currentDeviceIndex) {
-    lastDeviceIndex = currentDeviceIndex;
-    wasActive = false;
-    lastSensorId = -1;
-    lastRelayId = -1;
-    lastPidIndex = -1;
-    temp.sensorPtr = nullptr;
-    temp.relayPtr = nullptr;
-  }
-
-  if (!temp.isUseSetting) {
-    if (wasActive) {
-      if (temp.relayPtr && temp.collectionSettings.get(0)) {
-        temp.relayPtr->statePin = temp.relayPtr->lastState;
-        temp.relayPtr->isPwm = false;
-        temp.relayPtr->pwm = 0;
-      }
-      if (temp.collectionSettings.get(1)) device.isTimersEnabled = false;
-      if (myPID) {
-        myPID.reset();
-        myPID = nullptr;
-      }
-      wasActive = false;
-    }
-    return;
-  }
-
-  if (!wasActive) {
-    temp.sensorPtr = findSensorById(device, temp.sensorId);
-    temp.relayPtr = findRelayById(device, temp.relayId);
-
-    if (!temp.sensorPtr || !temp.relayPtr) {
-      temp.isUseSetting = false;
-      return;
+    // Смена устройства → сброс состояния
+    if (lastDeviceIndex != currentDeviceIndex) {
+        lastDeviceIndex = currentDeviceIndex;
+        wasActive = false;
+        lastSensorId = -1;
+        lastRelayId = -1;
+        lastPidIndex = -1;
+        temp.sensorPtr = nullptr;
+        temp.relayPtr = nullptr;
+        lastSetTemperature = -999.0f;
     }
 
-    temp.relayPtr->lastState = temp.relayPtr->statePin;
-    lastSensorId = temp.sensorId;
-    lastRelayId = temp.relayId;
-    lastPidIndex = temp.selectedPidIndex;
+    if (!temp.isUseSetting) {
+        if (wasActive) {
+            if (temp.relayPtr && temp.collectionSettings.get(0)) {
+                temp.relayPtr->statePin = false;
+                temp.relayPtr->isPwm = false;
+                temp.relayPtr->pwm = 0;
+            }
+            if (temp.collectionSettings.get(1)) device.isTimersEnabled = false;
+            if (myPID) {
+                myPID.reset();
+                myPID = nullptr;
+            }
+            wasActive = false;
+        }
+        return;
+    }
 
-    inputPid = static_cast<double>(temp.sensorPtr->currentValue);
-    setpointPid = static_cast<double>(temp.setTemperature);
-    outputPid = 0.0;
+    // Инициализация при первом запуске или смене параметров
+    if (!wasActive || 
+        temp.sensorId != lastSensorId ||
+        temp.relayId != lastRelayId ||
+        temp.selectedPidIndex != lastPidIndex ||
+        fabs(temp.setTemperature - lastSetTemperature) > 0.1f)  // <-- Если уставка изменилась
+    {
+        temp.sensorPtr = findSensorById(device, temp.sensorId);
+        temp.relayPtr = findRelayById(device, temp.relayId);
+
+        if (!temp.sensorPtr || !temp.relayPtr) {
+            temp.isUseSetting = false;
+            return;
+        }
+
+        temp.relayPtr->lastState = temp.relayPtr->statePin;
+        lastSensorId = temp.sensorId;
+        lastRelayId = temp.relayId;
+        lastPidIndex = temp.selectedPidIndex;
+        lastSetTemperature = temp.setTemperature;  // Сохраняем новую уставку
+
+        inputPid = static_cast<double>(temp.sensorPtr->currentValue);
+        setpointPid = static_cast<double>(temp.setTemperature);
+        outputPid = 0.0;
 
     if (temp.selectedPidIndex == -2) {
       Serial.println("Control Mode: Hysteresis");
@@ -347,6 +357,10 @@ void Control::setTemperature() {
 
   temp.currentTemp = temp.sensorPtr->currentValue;
 
+   if ((temp.sensorPtr->typeSensor.get(0) || temp.sensorPtr->typeSensor.get(1) ) && (temp.currentTemp < -200.0f || temp.currentTemp > 200.0f)) {
+    return;
+  }
+
   if (temp.currentTemp <= -998.0f) {
     if (wasActive) {
       char logBuffer[128];
@@ -372,20 +386,22 @@ void Control::setTemperature() {
   }
 
   if (temp.selectedPidIndex == -2) {
-
     temp.relayPtr->isPwm = false;
     if (!temp.relayPtr->manualMode) {
-      const float hysteresis_delta = 1.5;
-      if (temp.isIncrease) {
-        if (temp.currentTemp <= temp.setTemperature - hysteresis_delta) temp.relayPtr->statePin = true;
-        else if (temp.currentTemp >= temp.setTemperature) temp.relayPtr->statePin = false;
-      } else {
-        if (temp.currentTemp >= temp.setTemperature + hysteresis_delta) temp.relayPtr->statePin = true;
-        else if (temp.currentTemp <= temp.setTemperature) temp.relayPtr->statePin = false;
-      }
+        const float hysteresisDelta = 1.5;
+        
+        if (temp.isIncrease) {
+            if (temp.currentTemp <= temp.setTemperature - hysteresisDelta)
+                temp.relayPtr->statePin = true;
+            else if (temp.currentTemp >= temp.setTemperature)
+                temp.relayPtr->statePin = false;
+        } else {
+            if (temp.currentTemp >= temp.setTemperature + hysteresisDelta)
+                temp.relayPtr->statePin = true;
+            else if (temp.currentTemp <= temp.setTemperature)
+                temp.relayPtr->statePin = false;
+        }
     }
-   // device.isTimersEnabled = false;
-
   } else {
     if (!myPID) return;
 
@@ -428,9 +444,9 @@ void Control::setTemperature() {
       temp.relayPtr->isPwm = false;
       device.isTimersEnabled = (temp.pidOutputMs > 0);
     } else {
-//      temp.relayPtr->isPwm = false;
-//      temp.relayPtr->statePin = false;
-//      device.isTimersEnabled = false;
+      temp.relayPtr->isPwm = false;
+       temp.relayPtr->statePin = false;
+      device.isTimersEnabled = false;
     }
   }
 }

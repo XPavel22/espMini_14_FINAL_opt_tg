@@ -1033,8 +1033,13 @@ uint32_t DeviceManager::calculateTimersProgressChecksum() {
 
 bool DeviceManager::handleRelayCommand(const JsonObject& command, uint32_t clientNum) {
 
-  if (myDevices.empty()) {return false;
-  }Device& device = myDevices[currentDeviceIndex];
+  if (myDevices.empty()) {
+    return false;
+  }
+  
+  Device& device = myDevices[currentDeviceIndex];
+
+  device.isForceControlRelay = true;
 
   int relayId = command["relay"];
   const char* action = command["action"];
@@ -1053,7 +1058,8 @@ bool DeviceManager::handleRelayCommand(const JsonObject& command, uint32_t clien
     return anyRelayFound;
   }
 
-  if (command["relay"].isNull()) {return false;
+  if (command["relay"].isNull()) {
+    return false;
   }
 
   bool found = false;for (auto& relay : device.relays) {

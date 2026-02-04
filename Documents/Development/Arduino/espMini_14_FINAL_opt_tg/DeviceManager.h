@@ -206,6 +206,8 @@ struct Device {
   bool isEncyclateTimers;
   bool isScheduleEnabled;
   bool isActionEnabled;
+
+  bool isForceControlRelay;
 };
 
 class DeviceManager {

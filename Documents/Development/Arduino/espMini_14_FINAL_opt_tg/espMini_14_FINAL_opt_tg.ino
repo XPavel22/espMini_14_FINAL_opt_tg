@@ -222,7 +222,7 @@ void loop() {
       saveTimer = millis();
     }
 
-    if (millis() - saveTimer >= 300) {
+    if (millis() - saveTimer >= 200) {
       deviceManager.writeDevicesToFile(deviceManager.myDevices, "/devices.json");
 
       saveTimer = 0;
@@ -230,9 +230,9 @@ void loop() {
 
       deviceManager.saveDeviceFlagsState(); // сохраняем флаги
       deviceManager.deviceFlagsOff(); // сбрасываем в false
-
+      delay(100);
       control.setupControl(true); // переинициализируем
-
+      delay(100);
       deviceManager.restoreDeviceFlagsState(); // восстанавливаем флаги
 
       deviceManager.isSaveControl = false;
