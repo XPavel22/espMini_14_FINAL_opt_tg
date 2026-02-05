@@ -901,6 +901,9 @@ void Control::setupControl(bool onlyDHT) {
 
     if (onlyDHT) return ;
 
+    analogReadResolution(12);
+    analogSetAttenuation(ADC_11db);
+
     std::unordered_set<uint8_t> usedPins;
     for (auto& relay : device.relays) {
         if (usedPins.count(relay.pin)) {
@@ -997,11 +1000,14 @@ void Control::setupControl(bool onlyDHT) {
     }
 
     int adcValue = analogRead(inputRelay->pin);
-
+    Serial.printf("[ADC Debug] Raw value: %d\n", adcValue);
+    
     int mappedValue = map(adcValue, 0, 4095, 0, 255);
+  
+    mappedValue = constrain(mappedValue, 0, 255); 
 
     return mappedValue;
-  }
+}
 
   bool Control::checkTouchSensor(uint8_t pin) {
     static const int DEBOUNCE_MS = 20;
