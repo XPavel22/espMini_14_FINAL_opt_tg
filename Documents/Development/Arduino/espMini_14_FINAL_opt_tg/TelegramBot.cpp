@@ -93,6 +93,21 @@ void TelegramBot::sendSimpleStatus(int64_t chatId) {
                      "📟 Устройство: %s\n\n",
                      currentDevice.nameDevice);
 
+
+  char urlBuffer[64];
+
+  if (strlen(settings.mDNS) > 0) {
+    snprintf(urlBuffer, sizeof(urlBuffer), "http://%s.local", settings.mDNS);
+  } else {
+    IPAddress ip = WiFi.localIP();
+    snprintf(urlBuffer, sizeof(urlBuffer), "http://%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+  }
+
+  offset += snprintf(messageBuffer + offset, STATUS_BUFFER_SIZE - offset,
+                     "🌐 Сеть: %s | Доступ: %s\n\n",
+                     WiFi.SSID().c_str(),
+                     urlBuffer);
+
   int outputRelayCount = 0;
   for (size_t i = 0; i < currentDevice.relays.size(); ++i) {
     const auto& relay = currentDevice.relays[i];
@@ -421,6 +436,10 @@ void TelegramBot::loop() {
         else if (text == "/help" || text == "help") {
           Serial.println("Sending help...");
           sendHelpMessage(msg.sender.id);
+        }
+        else if (text == "/info" || text == "info") {
+          Serial.println("Sending info...");
+          sendInfoMessage(msg.sender.id);
         }
         else if (text == "/reset" || text == "reset") {
           if (hasPermission(userId, "writing")) {

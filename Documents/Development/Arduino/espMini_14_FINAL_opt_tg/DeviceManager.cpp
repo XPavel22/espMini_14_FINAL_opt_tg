@@ -481,7 +481,9 @@ void DeviceManager::convertBooleansToIntegers(JsonVariant variant) {
 
 bool DeviceManager::deserializeDevice(JsonObject doc, Device& device) {
 
- appState.isProcessWorkingJson = true;if (doc.containsKey("nmd")) {
+ appState.isProcessWorkingJson = true;
+ 
+ if (doc.containsKey("nmd")) {
         strncpy_safe(device.nameDevice, doc["nmd"], MAX_DESCRIPTION_LENGTH);
       }
 
