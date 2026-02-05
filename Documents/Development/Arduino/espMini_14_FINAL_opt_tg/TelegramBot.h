@@ -50,6 +50,7 @@ private:
 
     void sendSimpleStatus(int64_t chatId);
     void sendHelpMessage(int64_t chatId);
+    void sendInfoMessage(int64_t chatId);
     void handleRelayCommand(int64_t chatId, const String& command);
     void handleSystemToggleCommand(int64_t chatId, const String& command);
     bool hasPermission(const String& userId, const String& permission);

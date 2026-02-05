@@ -96,8 +96,8 @@ void TelegramBot::sendSimpleStatus(int64_t chatId) {
 
   char urlBuffer[64];
 
-  if (strlen(settings.mDNS) > 0) {
-    snprintf(urlBuffer, sizeof(urlBuffer), "http://%s.local", settings.mDNS);
+  if (strlen(settings.ws.mDNS.c_str()) > 0) {
+    snprintf(urlBuffer, sizeof(urlBuffer), "http://%s.local", settings.ws.mDNS.c_str());
   } else {
     IPAddress ip = WiFi.localIP();
     snprintf(urlBuffer, sizeof(urlBuffer), "http://%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
@@ -186,6 +186,19 @@ void TelegramBot::sendHelpMessage(int64_t chatId) {
   msg.chatId = chatId;
   myBot.setFormattingStyle(AsyncTelegram2::FormatStyle::HTML);
   myBot.sendMessage(msg, messageBuffer);
+  myBot.setFormattingStyle(AsyncTelegram2::FormatStyle::MARKDOWN);
+}
+
+void TelegramBot::sendInfoMessage(int64_t chatId) {
+  constexpr size_t INFO_BUFFER_SIZE = 1024;
+  char infoBuffer[INFO_BUFFER_SIZE];
+
+  sysInfo.getSystemStatus(infoBuffer, INFO_BUFFER_SIZE);
+
+  TBMessage msg;
+  msg.chatId = chatId;
+  myBot.setFormattingStyle(AsyncTelegram2::FormatStyle::HTML);
+  myBot.sendMessage(msg, infoBuffer);
   myBot.setFormattingStyle(AsyncTelegram2::FormatStyle::MARKDOWN);
 }
 
