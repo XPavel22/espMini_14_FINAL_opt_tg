@@ -931,30 +931,48 @@ void Control::setupControl(bool onlyDHT) {
                 }
             }
 
-            if (linkedSensor) {
+          if (linkedSensor) {
 
-                if (linkedSensor->typeSensor.get(3)) {
-                    if (!relay.isDigital) {
-                        relay.isDigital = true;
-                    }
-                    pinMode(relay.pin, INPUT_PULLUP);
-                    touchStates[relay.pin] = TouchSensorState();
-                } else if (linkedSensor->typeSensor.get(0) || linkedSensor->typeSensor.get(1)) {
-                    if (!relay.isDigital) {
-                        relay.isDigital = true;
-                    }
-                } else if (linkedSensor->typeSensor.get(2) || linkedSensor->typeSensor.get(4)) {
-                    if (relay.isDigital) {
-                        relay.isDigital = false;
-                    }
-                    pinMode(relay.pin, INPUT);
-                } else {
-                    if (!relay.isDigital) {
-                        relay.isDigital = true;
-                    }
-                    pinMode(relay.pin, INPUT);
-                }
-            } else {
+    if (linkedSensor->typeSensor.get(3)) {
+        // Цифровой вход с подтяжкой к +3.3В 
+        if (!relay.isDigital) {
+            relay.isDigital = true;
+        }
+        pinMode(relay.pin, INPUT_PULLUP);
+        touchStates[relay.pin] = TouchSensorState();
+        
+    } else if (linkedSensor->typeSensor.get(0) || linkedSensor->typeSensor.get(1)) {
+        // Тип 0 или 1 цифровой вход без подтяжки
+        if (!relay.isDigital) {
+            relay.isDigital = true;
+        }
+      pinMode(relay.pin, INPUT);
+      
+    // --- Аналоговые входы ---
+    } else if (linkedSensor->typeSensor.get(2)) {
+        // Тип 2: Аналоговый вход БЕЗ подтяжки 
+        if (relay.isDigital) {
+            relay.isDigital = false;
+        }
+        pinMode(relay.pin, INPUT); 
+
+    } else if (linkedSensor->typeSensor.get(4)) {
+        // Тип 4: Аналоговый вход С подтяжкой к земле (pull-down)
+        // Подходит для датчиков, которые могут отключаться, чтобы избежать шумов на "висящем" входе
+        if (relay.isDigital) {
+            relay.isDigital = false;
+        }
+        pinMode(relay.pin, INPUT_PULLDOWN);
+
+    // --- Случай по умолчанию ---
+    } else {
+        // Если тип сенсора не определен, считаем его стандартным цифровым входом
+        if (!relay.isDigital) {
+            relay.isDigital = true;
+        }
+        pinMode(relay.pin, INPUT);
+    }
+} else {
                 snprintf(logBuffer, sizeof(logBuffer), "Предупреждение: Входное реле ID %d (пин %d) не привязано к сенсору. Установлен режим INPUT.", relay.id, relay.pin);
                 logger.addLog(logBuffer, LOG_ERROR);
             }
