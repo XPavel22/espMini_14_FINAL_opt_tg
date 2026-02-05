@@ -255,7 +255,7 @@ void Control::setTemperature() {
     static int lastSensorId = -1;
     static int lastRelayId = -1;
     static int lastPidIndex = -1;
-    static float lastSetTemperature = -999.0f;  // <-- Новый флаг: последняя уставка
+    static float lastSetTemperature = -999.0f; 
 
     // Смена устройства → сброс состояния
     if (lastDeviceIndex != currentDeviceIndex) {
@@ -789,46 +789,56 @@ Sensor* Control::findSensorById(Device& device, int id) {
         continue;
       }
 
-      bool shouldBeActive = false;
-      String activePeriod = "";
-      for (auto& timePeriod : scenario.startEndTimes) {
-        String startTimeStr = String(timePeriod.startTime);
-        String endTimeStr = String(timePeriod.endTime);
+        bool shouldBeActive = false;
+        String activePeriod = "";
 
-        int startMinutes = startTimeStr.substring(0, 2).toInt() * 60 +
-                           startTimeStr.substring(3, 5).toInt();
-        int endMinutes = endTimeStr.substring(0, 2).toInt() * 60 +
-                         endTimeStr.substring(3, 5).toInt();
+        for (auto& timePeriod : scenario.startEndTimes) {
+            String startTimeStr = String(timePeriod.startTime);
+            String endTimeStr = String(timePeriod.endTime);
 
-        if (startTimeStr.length() < 5 || endTimeStr.length() < 5) {
-          String message = "Invalid time format in scenario: ";
-          message += scenario.description;
-
-          continue;
-        }
-
-        if (currentMinutes >= startMinutes && currentMinutes <= endMinutes) {
-          shouldBeActive = true;
-          activePeriod = startTimeStr;
-          activePeriod += "-";
-          activePeriod += endTimeStr;
-          break;
-        }
-      }
-
-   if (shouldBeActive) {
-
-            collectionSettingsSchedule(true, scenario);
-
-            if (!scenario.isActive) {
-                Serial.printf("[Schedule] Scenario '%s' became active.\n", scenario.description);
-                scenario.isActive = true;
+            if (startTimeStr.length() < 5 || endTimeStr.length() < 5) {
+                //Serial.printf("[Schedule Error] Invalid time format in scenario '%s'. Skipping.\n", scenario.description);
+                continue;
             }
 
-        } else {
+            int startMinutes = startTimeStr.substring(0, 2).toInt() * 60 + startTimeStr.substring(3, 5).toInt();
+            int endMinutes = endTimeStr.substring(0, 2).toInt() * 60 + endTimeStr.substring(3, 5).toInt();
+            
+//            Serial.printf("[Schedule Debug] Checking period %02d:%02d (%d) to %02d:%02d (%d) for scenario '%s'\n",
+//                          startMinutes / 60, startMinutes % 60, startMinutes,
+//                          endMinutes / 60, endMinutes % 60, endMinutes,
+//                          scenario.description);
 
+            bool periodIsActive = false;
+
+            if (startMinutes <= endMinutes) {
+                if (currentMinutes >= startMinutes && currentMinutes < endMinutes) {
+                    periodIsActive = true;
+                }
+            } 
+            else {
+                if (currentMinutes >= startMinutes || currentMinutes < endMinutes) {
+                    periodIsActive = true;
+                }
+            }
+
+            if (periodIsActive) {
+                shouldBeActive = true;
+                activePeriod = startTimeStr + "-" + endTimeStr;
+               // Serial.printf("[Schedule Debug] -> Period is ACTIVE for scenario '%s'.\n", scenario.description);
+                break; 
+            }
+        }
+
+        if (shouldBeActive) {
+            if (!scenario.isActive) {
+              //  Serial.printf("[Schedule] Activating scenario '%s' for period %s.\n", scenario.description, activePeriod.c_str());
+                collectionSettingsSchedule(true, scenario);
+                scenario.isActive = true;
+            }
+        } else {
             if (scenario.isActive) {
-                Serial.printf("[Schedule] Deactivating scenario '%s'.\n", scenario.description);
+               // Serial.printf("[Schedule] Deactivating scenario '%s' (time is outside all active periods).\n", scenario.description);
                 collectionSettingsSchedule(false, scenario);
                 scenario.isActive = false;
             }
